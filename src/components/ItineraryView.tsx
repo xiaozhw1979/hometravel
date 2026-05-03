@@ -3,13 +3,13 @@ import {
   Plus, Trash2, Pencil, Check, MapPin, Clock, CalendarPlus, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { ItineraryDay, Activity } from '../types'
+import { useAuth } from '../contexts/AuthContext'
 import {
-  addItineraryDay,
-  deleteItineraryDay,
+  addDay,
+  deleteDay,
   addActivity,
-  updateActivity,
-  deleteActivity,
-} from '../store'
+  updateActivities,
+} from '../firestore'
 
 interface ItineraryViewProps {
   tripId: string
@@ -101,25 +101,32 @@ function ActivityForm({ initial, onSave, onCancel }: ActivityFormProps) {
 // ─── Single activity row ──────────────────────────────────────────────────────
 interface ActivityItemProps {
   activity: Activity
+  familyId: string
   tripId: string
   dayId: string
+  allActivities: Activity[]
   onUpdated: (a: Activity) => void
   onDeleted: (id: string) => void
 }
 
-function ActivityItem({ activity, tripId, dayId, onUpdated, onDeleted }: ActivityItemProps) {
+function ActivityItem({ activity, familyId, tripId, dayId, allActivities, onUpdated, onDeleted }: ActivityItemProps) {
   const [editing, setEditing] = useState(false)
 
-  function handleSave(data: Omit<Activity, 'id'>) {
-    updateActivity(tripId, dayId, activity.id, data)
-    onUpdated({ ...activity, ...data })
+  async function handleSave(data: Omit<Activity, 'id'>) {
+    const updated = { ...activity, ...data }
+    // Optimistic
+    onUpdated(updated)
     setEditing(false)
+    const newList = allActivities.map((a) => a.id === activity.id ? updated : a)
+    await updateActivities(familyId, tripId, dayId, newList)
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     if (!window.confirm(`确认删除「${activity.title}」？`)) return
-    deleteActivity(tripId, dayId, activity.id)
+    // Optimistic
     onDeleted(activity.id)
+    const newList = allActivities.filter((a) => a.id !== activity.id)
+    await updateActivities(familyId, tripId, dayId, newList)
   }
 
   if (editing) {
@@ -184,21 +191,22 @@ function ActivityItem({ activity, tripId, dayId, onUpdated, onDeleted }: Activit
 // ─── Single day card ─────────────────────────────────────────────────────────
 interface DayCardProps {
   day: ItineraryDay
+  familyId: string
   tripId: string
   dayNumber: number
   onDayUpdated: (day: ItineraryDay) => void
   onDayDeleted: (id: string) => void
 }
 
-function DayCard({ day, tripId, dayNumber, onDayUpdated, onDayDeleted }: DayCardProps) {
+function DayCard({ day, familyId, tripId, dayNumber, onDayUpdated, onDayDeleted }: DayCardProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [addingActivity, setAddingActivity] = useState(false)
 
-  function handleAddActivity(data: Omit<Activity, 'id'>) {
-    addActivity(tripId, day.id, data)
+  async function handleAddActivity(data: Omit<Activity, 'id'>) {
+    const newActivity = await addActivity(familyId, tripId, day.id, data)
     const updated: ItineraryDay = {
       ...day,
-      activities: [...day.activities, { ...data, id: crypto.randomUUID() }],
+      activities: [...day.activities, newActivity],
     }
     onDayUpdated(updated)
     setAddingActivity(false)
@@ -215,10 +223,11 @@ function DayCard({ day, tripId, dayNumber, onDayUpdated, onDayDeleted }: DayCard
     onDayUpdated({ ...day, activities: day.activities.filter((a) => a.id !== id) })
   }
 
-  function handleDeleteDay() {
+  async function handleDeleteDay() {
     if (!window.confirm(`确认删除第 ${dayNumber} 天的行程？`)) return
-    deleteItineraryDay(tripId, day.id)
+    // Optimistic
     onDayDeleted(day.id)
+    await deleteDay(familyId, tripId, day.id)
   }
 
   return (
@@ -265,8 +274,10 @@ function DayCard({ day, tripId, dayNumber, onDayUpdated, onDayDeleted }: DayCard
             <ActivityItem
               key={act.id}
               activity={act}
+              familyId={familyId}
               tripId={tripId}
               dayId={day.id}
+              allActivities={day.activities}
               onUpdated={handleActivityUpdated}
               onDeleted={handleActivityDeleted}
             />
@@ -342,10 +353,12 @@ function AddDayForm({ onAdd, onCancel, existingDates }: AddDayFormProps) {
 
 // ─── Main ItineraryView ───────────────────────────────────────────────────────
 export default function ItineraryView({ tripId, days, onDaysChange }: ItineraryViewProps) {
+  const { family } = useAuth()
   const [addingDay, setAddingDay] = useState(false)
 
-  function handleAddDay(date: string) {
-    const newDay = addItineraryDay(tripId, { date, activities: [] })
+  async function handleAddDay(date: string) {
+    if (!family) return
+    const newDay = await addDay(family.id, tripId, { date, activities: [] })
     const updated = [...days, newDay].sort((a, b) => a.date.localeCompare(b.date))
     onDaysChange(updated)
     setAddingDay(false)
@@ -383,6 +396,7 @@ export default function ItineraryView({ tripId, days, onDaysChange }: ItineraryV
         <DayCard
           key={day.id}
           day={day}
+          familyId={family?.id ?? ''}
           tripId={tripId}
           dayNumber={idx + 1}
           onDayUpdated={handleDayUpdated}

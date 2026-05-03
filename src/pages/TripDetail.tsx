@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Calendar, Images, ListOrdered } from 'lucide-react'
-import { getTrip, getPhotosByTrip, getItineraryByTrip } from '../store'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from '../firebase'
+import { useAuth } from '../contexts/AuthContext'
+import { subscribePhotos, subscribeItinerary } from '../firestore'
 import { Trip, Photo, ItineraryDay } from '../types'
 import PhotoGrid from '../components/PhotoGrid'
 import ItineraryView from '../components/ItineraryView'
@@ -43,20 +46,40 @@ function CoverBanner({ coverPhoto, name }: { coverPhoto?: string; name: string }
 export default function TripDetail({ initialTab = 'photos' }: TripDetailProps) {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { family } = useAuth()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [days, setDays] = useState<ItineraryDay[]>([])
   const [tab, setTab] = useState<Tab>(initialTab)
   const [notFound, setNotFound] = useState(false)
 
+  // Subscribe to trip document
   useEffect(() => {
-    if (!id) { setNotFound(true); return }
-    const t = getTrip(id)
-    if (!t) { setNotFound(true); return }
-    setTrip(t)
-    setPhotos(getPhotosByTrip(id))
-    setDays(getItineraryByTrip(id))
-  }, [id])
+    if (!id || !family) { setNotFound(true); return }
+    const tripRef = doc(db, 'families', family.id, 'trips', id)
+    const unsub = onSnapshot(tripRef, (snap) => {
+      if (!snap.exists()) {
+        setNotFound(true)
+      } else {
+        setTrip({ id: snap.id, ...snap.data() } as Trip)
+      }
+    })
+    return unsub
+  }, [id, family?.id])
+
+  // Subscribe to photos
+  useEffect(() => {
+    if (!id || !family) return
+    const unsub = subscribePhotos(family.id, id, setPhotos)
+    return unsub
+  }, [id, family?.id])
+
+  // Subscribe to itinerary
+  useEffect(() => {
+    if (!id || !family) return
+    const unsub = subscribeItinerary(family.id, id, setDays)
+    return unsub
+  }, [id, family?.id])
 
   useEffect(() => {
     setTab(initialTab)

@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { X, ChevronLeft, ChevronRight, Pencil, Check } from 'lucide-react'
 import { Photo } from '../types'
-import { updatePhoto } from '../store'
+import { useAuth } from '../contexts/AuthContext'
+import { updatePhoto } from '../firestore'
 
 interface LightboxProps {
   photos: Photo[]
@@ -11,6 +12,7 @@ interface LightboxProps {
 }
 
 export default function Lightbox({ photos, initialIndex, onClose, onPhotosChange }: LightboxProps) {
+  const { family } = useAuth()
   const [current, setCurrent] = useState(initialIndex)
   const [editingCaption, setEditingCaption] = useState(false)
   const [captionValue, setCaptionValue] = useState('')
@@ -40,14 +42,15 @@ export default function Lightbox({ photos, initialIndex, onClose, onPhotosChange
     return () => window.removeEventListener('keydown', onKey)
   }, [prev, next, onClose])
 
-  function saveCaption() {
-    if (!photo) return
-    updatePhoto(photo.id, { caption: captionValue })
+  async function saveCaption() {
+    if (!photo || !family) return
+    // Optimistic update
     const updated = photos.map((p) =>
       p.id === photo.id ? { ...p, caption: captionValue } : p
     )
     onPhotosChange(updated)
     setEditingCaption(false)
+    await updatePhoto(family.id, photo.tripId, photo.id, { caption: captionValue })
   }
 
   if (!photo) return null

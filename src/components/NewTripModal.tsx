@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { X, MapPin, Calendar, Image, AlignLeft } from 'lucide-react'
-import { createTrip } from '../store'
+import { useAuth } from '../contexts/AuthContext'
+import { addTrip } from '../firestore'
 import { Trip } from '../types'
 
 interface NewTripModalProps {
@@ -18,6 +19,7 @@ const GRADIENT_OPTIONS = [
 ]
 
 export default function NewTripModal({ onClose, onCreated }: NewTripModalProps) {
+  const { user, family } = useAuth()
   const [name, setName] = useState('')
   const [destination, setDestination] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -25,6 +27,7 @@ export default function NewTripModal({ onClose, onCreated }: NewTripModalProps) 
   const [description, setDescription] = useState('')
   const [coverPhoto, setCoverPhoto] = useState<string>('gradient-amber')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function validate(): boolean {
@@ -50,18 +53,29 @@ export default function NewTripModal({ onClose, onCreated }: NewTripModalProps) 
     reader.readAsDataURL(file)
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate()) return
-    const trip = createTrip({
-      name: name.trim(),
-      destination: destination.trim(),
-      startDate,
-      endDate,
-      coverPhoto,
-      description: description.trim(),
-    })
-    onCreated(trip)
+    if (!validate() || !family || !user) return
+    setSubmitting(true)
+    try {
+      const trip = await addTrip(
+        family.id,
+        {
+          name: name.trim(),
+          destination: destination.trim(),
+          startDate,
+          endDate,
+          coverPhoto,
+          description: description.trim(),
+        },
+        user.uid
+      )
+      onCreated(trip)
+    } catch {
+      setErrors({ submit: '创建失败，请重试' })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -208,6 +222,12 @@ export default function NewTripModal({ onClose, onCreated }: NewTripModalProps) 
             />
           </div>
 
+          {errors.submit && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+              {errors.submit}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-1">
             <button
@@ -219,9 +239,10 @@ export default function NewTripModal({ onClose, onCreated }: NewTripModalProps) 
             </button>
             <button
               type="submit"
-              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors"
+              disabled={submitting}
+              className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white py-2.5 rounded-xl text-sm font-medium transition-colors"
             >
-              创建行程
+              {submitting ? '创建中...' : '创建行程'}
             </button>
           </div>
         </form>

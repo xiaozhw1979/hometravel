@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Trash2, ImageOff } from 'lucide-react'
 import { Photo } from '../types'
-import { deletePhoto } from '../store'
+import { useAuth } from '../contexts/AuthContext'
+import { deletePhoto } from '../firestore'
 import Lightbox from './Lightbox'
 import AddPhotoButton from './AddPhotoButton'
 
@@ -12,16 +13,18 @@ interface PhotoGridProps {
 }
 
 export default function PhotoGrid({ tripId, photos, onPhotosChange }: PhotoGridProps) {
+  const { family } = useAuth()
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  function handleDelete(e: React.MouseEvent, id: string) {
+  async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation()
-    if (!window.confirm('确认删除这张照片？')) return
-    deletePhoto(id)
+    if (!window.confirm('确认删除这张照片？') || !family) return
+    // Optimistic update
     onPhotosChange(photos.filter((p) => p.id !== id))
     if (lightboxIndex !== null) {
       setLightboxIndex(null)
     }
+    await deletePhoto(family.id, tripId, id)
   }
 
   function handleAdded(newPhotos: Photo[]) {

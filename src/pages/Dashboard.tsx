@@ -1,38 +1,51 @@
 import { useState, useEffect } from 'react'
-import { PlaneTakeoff, Image, MapPin, Plus } from 'lucide-react'
-import { getTrips, getPhotos, deleteTrip } from '../store'
+import { PlaneTakeoff, Image, MapPin, Plus, Users, Copy, Check, LogOut } from 'lucide-react'
+import { signOut } from 'firebase/auth'
+import { auth } from '../firebase'
+import { useAuth } from '../contexts/AuthContext'
+import { subscribeTrips, deleteTrip } from '../firestore'
 import { Trip } from '../types'
 import TripCard from '../components/TripCard'
 import NewTripModal from '../components/NewTripModal'
 
 export default function Dashboard() {
+  const { user, family } = useAuth()
   const [trips, setTrips] = useState<Trip[]>([])
-  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({})
+  const [photoCounts] = useState<Record<string, number>>({})
   const [showModal, setShowModal] = useState(false)
-
-  function loadData() {
-    const t = getTrips()
-    setTrips(t)
-    const photos = getPhotos()
-    const counts: Record<string, number> = {}
-    photos.forEach((p) => {
-      counts[p.tripId] = (counts[p.tripId] ?? 0) + 1
-    })
-    setPhotoCounts(counts)
-  }
+  const [showMembers, setShowMembers] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [])
+    if (!family) return
+    const unsub = subscribeTrips(family.id, (t) => setTrips(t))
+    return unsub
+  }, [family?.id])
 
-  function handleDelete(id: string) {
-    deleteTrip(id)
-    loadData()
+  async function handleDelete(id: string) {
+    if (!family) return
+    await deleteTrip(family.id, id)
+    // Firestore snapshot will update state automatically
   }
 
-  function handleCreated(trip: Trip) {
-    setTrips((prev) => [trip, ...prev])
+  function handleCreated(_trip: Trip) {
     setShowModal(false)
+    // Snapshot listener will pick up the new trip
+  }
+
+  async function handleCopyCode() {
+    if (!family) return
+    try {
+      await navigator.clipboard.writeText(family.inviteCode)
+    } catch {
+      // fallback: do nothing
+    }
+    setCodeCopied(true)
+    setTimeout(() => setCodeCopied(false), 2000)
+  }
+
+  async function handleSignOut() {
+    await signOut(auth)
   }
 
   const totalPhotos = Object.values(photoCounts).reduce((a, b) => a + b, 0)
@@ -49,18 +62,77 @@ export default function Dashboard() {
                 <PlaneTakeoff size={22} className="text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-wide">家庭旅行相册</h1>
+                <h1 className="text-xl font-bold tracking-wide">
+                  {family?.name ?? '家庭旅行相册'}
+                </h1>
                 <p className="text-amber-100 text-xs mt-0.5">记录每一段美好旅程</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-white/30"
-            >
-              <Plus size={16} />
-              新建行程
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-white/30"
+              >
+                <Plus size={16} />
+                新建行程
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-xl border border-white/30 transition-colors"
+                title="退出登录"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           </div>
+
+          {/* Family info bar */}
+          {family && (
+            <div className="mt-3 flex items-center gap-3 flex-wrap">
+              {/* Invite code */}
+              <button
+                onClick={handleCopyCode}
+                className="flex items-center gap-2 bg-white/15 hover:bg-white/25 rounded-xl px-3 py-1.5 text-xs transition-colors border border-white/20"
+                title="点击复制邀请码"
+              >
+                <span className="text-amber-100">邀请码</span>
+                <span className="font-mono font-bold tracking-widest">{family.inviteCode}</span>
+                {codeCopied
+                  ? <Check size={12} className="text-green-300" />
+                  : <Copy size={12} className="text-white/60" />
+                }
+              </button>
+
+              {/* Member count */}
+              <button
+                onClick={() => setShowMembers((v) => !v)}
+                className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 rounded-xl px-3 py-1.5 text-xs transition-colors border border-white/20"
+              >
+                <Users size={12} />
+                <span>{family.members.length} 位成员</span>
+              </button>
+
+              {/* Current user */}
+              <span className="text-amber-200 text-xs truncate max-w-[160px]">{user?.email}</span>
+            </div>
+          )}
+
+          {/* Members dropdown */}
+          {showMembers && family && (
+            <div className="mt-2 bg-white/20 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+              <p className="text-xs text-amber-100 font-medium mb-2">家庭成员</p>
+              <div className="space-y-1">
+                {family.members.map((uid) => (
+                  <div key={uid} className="flex items-center gap-2 text-xs text-white/90">
+                    <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Users size={10} />
+                    </div>
+                    <span className="font-mono truncate">{uid === user?.uid ? `${user?.email} (你)` : uid.slice(0, 12) + '…'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -77,7 +149,7 @@ export default function Dashboard() {
           <EmptyState onNew={() => setShowModal(true)} />
         ) : (
           <>
-            <h2 className="text-base font-semibold text-gray-700 mb-3">我的旅行</h2>
+            <h2 className="text-base font-semibold text-gray-700 mb-3">家庭旅行</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {trips.map((trip) => (
                 <TripCard

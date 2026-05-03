@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { addPhoto } from '../firestore'
+import { addPhoto } from '../dataLayer'
 import { Photo } from '../types'
 
 interface AddPhotoButtonProps {

@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, MapPin, Calendar, Images, ListOrdered } from 'lucide-react'
-import { doc, onSnapshot } from 'firebase/firestore'
-import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { subscribePhotos, subscribeItinerary } from '../firestore'
+import { subscribeTrip, subscribePhotos, subscribeItinerary } from '../dataLayer'
 import { Trip, Photo, ItineraryDay } from '../types'
 import PhotoGrid from '../components/PhotoGrid'
 import ItineraryView from '../components/ItineraryView'
@@ -56,13 +54,9 @@ export default function TripDetail({ initialTab = 'photos' }: TripDetailProps) {
   // Subscribe to trip document
   useEffect(() => {
     if (!id || !family) { setNotFound(true); return }
-    const tripRef = doc(db, 'families', family.id, 'trips', id)
-    const unsub = onSnapshot(tripRef, (snap) => {
-      if (!snap.exists()) {
-        setNotFound(true)
-      } else {
-        setTrip({ id: snap.id, ...snap.data() } as Trip)
-      }
+    const unsub = subscribeTrip(family.id, id, (t) => {
+      if (!t) setNotFound(true)
+      else setTrip(t)
     })
     return unsub
   }, [id, family?.id])

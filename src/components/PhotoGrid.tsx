@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Trash2, ImageOff } from 'lucide-react'
 import { Photo } from '../types'
 import { useAuth } from '../contexts/AuthContext'
-import { deletePhoto } from '../firestore'
+import { deletePhoto } from '../dataLayer'
 import Lightbox from './Lightbox'
 import AddPhotoButton from './AddPhotoButton'
 

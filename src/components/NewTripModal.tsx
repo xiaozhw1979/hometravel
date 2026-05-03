@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { X, MapPin, Calendar, Image, AlignLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { addTrip } from '../firestore'
+import { addTrip } from '../dataLayer'
 import { Trip } from '../types'
 
 interface NewTripModalProps {

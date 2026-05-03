@@ -9,7 +9,7 @@ import {
   deleteDay,
   addActivity,
   updateActivities,
-} from '../firestore'
+} from '../dataLayer'
 
 interface ItineraryViewProps {
   tripId: string

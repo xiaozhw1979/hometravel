@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, onAuthStateChanged } from 'firebase/auth'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
-import { auth, db } from '../firebase'
+import { auth, db, isFirebaseEnabled } from '../firebase'
 
 export interface FamilyInfo {
   id: string
@@ -27,6 +27,15 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
+const LOCAL_USER = { uid: 'local', email: '本机用户' } as unknown as User
+const LOCAL_FAMILY: FamilyInfo = {
+  id: 'local',
+  name: '我的家庭',
+  inviteCode: '',
+  members: ['local'],
+  createdBy: 'local',
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [family, setFamily] = useState<FamilyInfo | null>(null)
@@ -34,7 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [familyLoading, setFamilyLoading] = useState(false)
 
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+    if (!isFirebaseEnabled) {
+      setUser(LOCAL_USER)
+      setFamily(LOCAL_FAMILY)
+      setAuthLoading(false)
+      return
+    }
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u)
       setAuthLoading(false)
       if (!u) {
@@ -42,33 +57,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setFamilyLoading(false)
       }
     })
-    return unsubAuth
+    return unsub
   }, [])
 
-  // Subscribe to family doc whenever user changes
   useEffect(() => {
-    if (!user) {
-      setFamily(null)
-      return
-    }
+    if (!isFirebaseEnabled || !user) return
 
     setFamilyLoading(true)
-
-    // Find family where this user is a member
-    const familiesRef = collection(db, 'families')
-    const q = query(familiesRef, where('members', 'array-contains', user.uid))
-
-    const unsubFamily = onSnapshot(q, (snap) => {
+    const q = query(
+      collection(db, 'families'),
+      where('members', 'array-contains', user.uid)
+    )
+    const unsub = onSnapshot(q, (snap) => {
       if (snap.empty) {
         setFamily(null)
       } else {
-        const docSnap = snap.docs[0]
-        setFamily({ id: docSnap.id, ...docSnap.data() } as FamilyInfo)
+        const d = snap.docs[0]
+        setFamily({ id: d.id, ...d.data() } as FamilyInfo)
       }
       setFamilyLoading(false)
     })
-
-    return unsubFamily
+    return unsub
   }, [user?.uid])
 
   const loading = authLoading || familyLoading

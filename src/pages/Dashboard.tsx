@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { PlaneTakeoff, Image, MapPin, Plus, Users, Copy, Check, LogOut } from 'lucide-react'
 import { signOut } from 'firebase/auth'
-import { auth } from '../firebase'
+import { auth, isFirebaseEnabled } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { subscribeTrips, deleteTrip } from '../firestore'
+import { subscribeTrips, deleteTrip } from '../dataLayer'
 import { Trip } from '../types'
 import TripCard from '../components/TripCard'
 import NewTripModal from '../components/NewTripModal'
@@ -45,7 +45,7 @@ export default function Dashboard() {
   }
 
   async function handleSignOut() {
-    await signOut(auth)
+    if (isFirebaseEnabled) await signOut(auth)
   }
 
   const totalPhotos = Object.values(photoCounts).reduce((a, b) => a + b, 0)
@@ -76,18 +76,20 @@ export default function Dashboard() {
                 <Plus size={16} />
                 新建行程
               </button>
-              <button
-                onClick={handleSignOut}
-                className="p-2 bg-white/20 hover:bg-white/30 rounded-xl border border-white/30 transition-colors"
-                title="退出登录"
-              >
-                <LogOut size={16} />
-              </button>
+              {isFirebaseEnabled && (
+                <button
+                  onClick={handleSignOut}
+                  className="p-2 bg-white/20 hover:bg-white/30 rounded-xl border border-white/30 transition-colors"
+                  title="退出登录"
+                >
+                  <LogOut size={16} />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Family info bar */}
-          {family && (
+          {/* Family info bar - only show in Firebase mode */}
+          {isFirebaseEnabled && family && (
             <div className="mt-3 flex items-center gap-3 flex-wrap">
               {/* Invite code */}
               <button
